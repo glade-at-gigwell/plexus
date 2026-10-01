@@ -1,4 +1,4 @@
-import type { PiAiQuirks, ProviderCacheKeyInjection } from '@plexus/shared';
+import type { PiAiQuirks, ProviderCacheKeyInjection, ResponsesExtension } from '@plexus/shared';
 
 export * from './quota';
 
@@ -65,6 +65,8 @@ export interface Provider {
   maxConcurrency?: number | null;
   auto_compat?: boolean;
   cacheKeyInjection?: ProviderCacheKeyInjection;
+  /** Responses extensions accepted verbatim; undefined uses the default. */
+  responsesExtensions?: ResponsesExtension[];
   // Per-provider stall detection overrides
   stallTtfbMs?: number | null;
   stallTtfbBytes?: number | null;
@@ -160,6 +162,22 @@ export interface OAuthPrompt {
   allowEmpty?: boolean;
 }
 
+export interface OAuthSelectOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface OAuthSelect {
+  message: string;
+  options: OAuthSelectOption[];
+}
+
+export interface OAuthManualCode {
+  message: string;
+  placeholder?: string;
+}
+
 export interface OAuthSession {
   id: string;
   providerId: string;
@@ -167,6 +185,8 @@ export interface OAuthSession {
   status: string;
   authInfo?: OAuthAuthInfo;
   prompt?: OAuthPrompt;
+  select?: OAuthSelect;
+  manualCode?: OAuthManualCode;
   progress: string[];
   error?: string;
   createdAt: number;

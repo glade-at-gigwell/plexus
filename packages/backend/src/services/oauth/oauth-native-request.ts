@@ -43,6 +43,7 @@ import type { UnifiedChatRequest } from '../../types/unified';
 import { CodexVersionService } from './codex-version-service';
 import { stripUnsupportedGpt5Options } from '../../transformers/adapters/suppress-unsupported-gpt5-options.adapter';
 import { clampAnthropicEffortAndThinking } from '../../transformers/anthropic/thinking-clamp';
+import { detectResponsesExtensions } from '../dispatch/responses-extensions';
 
 /**
  * Auth for a native Anthropic request. Two modes, mirroring the old executor:
@@ -426,12 +427,11 @@ function buildFrameReverser(
 //     backend fields (reproducing pi-ai's buildRequestBody forcings).
 
 /**
- * Detect a genuine Codex CLI Responses request by body shape. The strongest
- * signal is the CLI turn metadata (`client_metadata`); Codex-native tool
- * extensions (`custom`/`namespace` tools, `additional_tools`/`custom_tool_call`
- * input items) are also CLI-only. Used to choose pass-through vs. adorn AND to
- * override the `hasCodexResponsesExtensions` flattening (which is for routing to
- * NON-Codex providers — the Codex backend understands these natively).
+ * Detect a genuine Codex CLI Responses request by body shape: the CLI turn
+ * metadata (`client_metadata`), or any Responses extension (namespace/custom
+ * tools, Codex lite items, namespaced/custom call history) — only an
+ * extension-native client produces those. Chooses pass-through vs. adorn for
+ * the Codex backend, which accepts every extension verbatim.
  */
 export function isCodexCliShapedBody(body: any): boolean {
   if (!body || typeof body !== 'object') return false;
@@ -449,28 +449,7 @@ export function isCodexCliShapedBody(body: any): boolean {
     }
   }
 
-  if (
-    Array.isArray(body.tools) &&
-    body.tools.some((t: any) => t?.type === 'custom' || t?.type === 'namespace')
-  ) {
-    return true;
-  }
-
-  if (
-    Array.isArray(body.input) &&
-    body.input.some(
-      (it: any) =>
-        it &&
-        typeof it === 'object' &&
-        (it.type === 'additional_tools' ||
-          it.type === 'custom_tool_call' ||
-          it.type === 'custom_tool_call_output')
-    )
-  ) {
-    return true;
-  }
-
-  return false;
+  return detectResponsesExtensions(body).size > 0;
 }
 
 /** Extract the ChatGPT account id from the Codex OAuth token's JWT claim. */
