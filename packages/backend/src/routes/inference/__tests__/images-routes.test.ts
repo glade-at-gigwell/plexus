@@ -28,7 +28,7 @@ type MultipartPart = MultipartFilePart | MultipartFieldPart;
  * preValidation hook drains the request and hangs the parsed parts, keyed by
  * field name, off `request.body`.
  */
-type AttachedMultipartBody = Record<string, MultipartPart>;
+type AttachedMultipartBody = Record<string, MultipartPart | MultipartPart[]>;
 
 type FakeRequest = {
   ip: string;
@@ -809,6 +809,267 @@ describe('Images route telemetry', () => {
     expect(replyState.statusCode).toBe(400);
     expect(replyState.payload).toMatchObject({
       error: { message: 'Missing required field: image', type: 'validation_error' },
+    });
+    expect(dispatchImageGenerations).not.toHaveBeenCalled();
+  });
+
+  it('collects every image[] file part into input_references for /v1/images/edits', async () => {
+    let editsHandler: EditsHandler | undefined;
+
+    const fastify = {
+      post(path: string, handler: EditsHandler) {
+        if (path === '/v1/images/edits') {
+          editsHandler = handler;
+        }
+      },
+    } as unknown as FastifyInstance;
+
+    const dispatchImageGenerations = vi.fn(async (_request: UnifiedImageGenerationRequest) => ({
+      created: 321,
+      data: [{ b64_json: 'ZWRpdGVk' }],
+      plexus: { provider: 'openai', model: 'gpt-image-1', apiType: 'images' },
+    }));
+
+    const mockDispatcher = {
+      dispatchImageGenerations,
+    } as unknown as Dispatcher;
+
+    const mockUsageStorage = {
+      saveRequest: vi.fn(async () => {}),
+      saveError: vi.fn(async () => {}),
+      emitStartedAsync: vi.fn(() => {}),
+      emitUpdatedAsync: vi.fn(() => {}),
+    } as unknown as UsageStorageService;
+
+    await registerImagesRoute(fastify, mockDispatcher, mockUsageStorage);
+    expect(editsHandler).toBeDefined();
+
+    const firstBytes = Buffer.from('fake-first-image');
+    const secondBytes = Buffer.from('fake-second-image');
+
+    const request: FakeRequest = {
+      ip: '127.0.0.1',
+      headers: {},
+      keyName: 'test-key-1',
+      attribution: null,
+      isMultipart: () => true,
+      body: {
+        image: [
+          {
+            type: 'file',
+            fieldname: 'image[]',
+            filename: 'first.png',
+            mimetype: 'image/png',
+            toBuffer: async () => firstBytes,
+          },
+          {
+            type: 'file',
+            fieldname: 'image[]',
+            filename: 'second.png',
+            mimetype: 'image/png',
+            toBuffer: async () => secondBytes,
+          },
+        ],
+        model: { type: 'field', fieldname: 'model', value: 'image-model' },
+        prompt: { type: 'field', fieldname: 'prompt', value: 'add a hat' },
+      },
+    };
+
+    const replyState: { statusCode?: number; payload?: unknown } = {};
+    const reply: FakeReply = {
+      code: vi.fn((statusCode: number) => {
+        replyState.statusCode = statusCode;
+        return reply;
+      }),
+      send: vi.fn((payload: unknown) => {
+        replyState.payload = payload;
+        return payload;
+      }),
+      header: vi.fn(() => reply),
+    };
+
+    await editsHandler!(request, reply);
+
+    expect(replyState.statusCode).toBeUndefined();
+    expect(dispatchImageGenerations).toHaveBeenCalledTimes(1);
+    const dispatched = dispatchImageGenerations.mock.calls[0]![0];
+    expect(dispatched.input_references).toEqual([
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${firstBytes.toString('base64')}` },
+        media_type: 'image/png',
+      },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${secondBytes.toString('base64')}` },
+        media_type: 'image/png',
+      },
+    ]);
+  });
+
+  it('keeps wire order for mixed image and image[] file parts for /v1/images/edits', async () => {
+    let editsHandler: EditsHandler | undefined;
+
+    const fastify = {
+      post(path: string, handler: EditsHandler) {
+        if (path === '/v1/images/edits') {
+          editsHandler = handler;
+        }
+      },
+    } as unknown as FastifyInstance;
+
+    const dispatchImageGenerations = vi.fn(async (_request: UnifiedImageGenerationRequest) => ({
+      created: 321,
+      data: [{ b64_json: 'ZWRpdGVk' }],
+      plexus: { provider: 'openai', model: 'gpt-image-1', apiType: 'images' },
+    }));
+
+    const mockDispatcher = {
+      dispatchImageGenerations,
+    } as unknown as Dispatcher;
+
+    const mockUsageStorage = {
+      saveRequest: vi.fn(async () => {}),
+      saveError: vi.fn(async () => {}),
+      emitStartedAsync: vi.fn(() => {}),
+      emitUpdatedAsync: vi.fn(() => {}),
+    } as unknown as UsageStorageService;
+
+    await registerImagesRoute(fastify, mockDispatcher, mockUsageStorage);
+    expect(editsHandler).toBeDefined();
+
+    const firstBytes = Buffer.from('fake-single-image');
+    const secondBytes = Buffer.from('fake-array-image');
+
+    const request: FakeRequest = {
+      ip: '127.0.0.1',
+      headers: {},
+      keyName: 'test-key-1',
+      attribution: null,
+      isMultipart: () => true,
+      body: {
+        image: [
+          {
+            type: 'file',
+            fieldname: 'image',
+            filename: 'first.png',
+            mimetype: 'image/png',
+            toBuffer: async () => firstBytes,
+          },
+          {
+            type: 'file',
+            fieldname: 'image[]',
+            filename: 'second.png',
+            mimetype: 'image/png',
+            toBuffer: async () => secondBytes,
+          },
+        ],
+        model: { type: 'field', fieldname: 'model', value: 'image-model' },
+        prompt: { type: 'field', fieldname: 'prompt', value: 'add a hat' },
+      },
+    };
+
+    const replyState: { statusCode?: number; payload?: unknown } = {};
+    const reply: FakeReply = {
+      code: vi.fn((statusCode: number) => {
+        replyState.statusCode = statusCode;
+        return reply;
+      }),
+      send: vi.fn((payload: unknown) => {
+        replyState.payload = payload;
+        return payload;
+      }),
+      header: vi.fn(() => reply),
+    };
+
+    await editsHandler!(request, reply);
+
+    expect(replyState.statusCode).toBeUndefined();
+    const dispatched = dispatchImageGenerations.mock.calls[0]![0];
+    expect(dispatched.input_references).toEqual([
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${firstBytes.toString('base64')}` },
+        media_type: 'image/png',
+      },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${secondBytes.toString('base64')}` },
+        media_type: 'image/png',
+      },
+    ]);
+  });
+
+  it('rejects more than 16 image[] parts for /v1/images/edits', async () => {
+    let editsHandler: EditsHandler | undefined;
+
+    const fastify = {
+      post(path: string, handler: EditsHandler) {
+        if (path === '/v1/images/edits') {
+          editsHandler = handler;
+        }
+      },
+    } as unknown as FastifyInstance;
+
+    const dispatchImageGenerations = vi.fn(async (_request: UnifiedImageGenerationRequest) => ({
+      created: 321,
+      data: [],
+      plexus: { provider: 'openai', model: 'gpt-image-1', apiType: 'images' },
+    }));
+
+    const mockDispatcher = {
+      dispatchImageGenerations,
+    } as unknown as Dispatcher;
+
+    const mockUsageStorage = {
+      saveRequest: vi.fn(async () => {}),
+      saveError: vi.fn(async () => {}),
+      emitStartedAsync: vi.fn(() => {}),
+      emitUpdatedAsync: vi.fn(() => {}),
+    } as unknown as UsageStorageService;
+
+    await registerImagesRoute(fastify, mockDispatcher, mockUsageStorage);
+    expect(editsHandler).toBeDefined();
+
+    const imageBytes = Buffer.from('fake-image-data');
+
+    const request: FakeRequest = {
+      ip: '127.0.0.1',
+      headers: {},
+      keyName: 'test-key-1',
+      attribution: null,
+      isMultipart: () => true,
+      body: {
+        image: Array.from({ length: 17 }, (_, i) => ({
+          type: 'file' as const,
+          fieldname: 'image[]',
+          filename: `ref-${i}.png`,
+          mimetype: 'image/png',
+          toBuffer: async () => imageBytes,
+        })),
+        model: { type: 'field', fieldname: 'model', value: 'image-model' },
+        prompt: { type: 'field', fieldname: 'prompt', value: 'add a hat' },
+      },
+    };
+
+    const replyState: { statusCode?: number; payload?: unknown } = {};
+    const reply: FakeReply = {
+      code: vi.fn((statusCode: number) => {
+        replyState.statusCode = statusCode;
+        return reply;
+      }),
+      send: vi.fn((payload: unknown) => {
+        replyState.payload = payload;
+        return payload;
+      }),
+      header: vi.fn(() => reply),
+    };
+
+    await editsHandler!(request, reply);
+
+    expect(replyState.statusCode).toBe(400);
+    expect(replyState.payload).toMatchObject({
+      error: { message: 'Too many image references (max 16)', type: 'validation_error' },
     });
     expect(dispatchImageGenerations).not.toHaveBeenCalled();
   });
