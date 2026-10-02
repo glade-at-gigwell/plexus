@@ -240,5 +240,41 @@ describe('Dispatcher service-tier suffix', () => {
       ).rejects.toMatchObject(denied('test-alias@flex'));
       expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    test('default and standard are one tier, so an entry for either covers both', async () => {
+      for (const [entry, model] of [
+        ['test-alias@default', 'test-alias@standard'],
+        ['test-alias@standard', 'test-alias@default'],
+      ] as const) {
+        await expect(
+          new Dispatcher().dispatch(withKeyPolicy(chatRequest(model), { excludedModels: [entry] }))
+        ).rejects.toMatchObject(denied(model));
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await new Dispatcher().dispatch(
+        withKeyPolicy(chatRequest('test-alias@standard'), {
+          allowedModels: ['test-alias@default'],
+        })
+      );
+      // The wire value is normalised to OpenAI's `default` spelling.
+      expect(sentBody().service_tier).toBe('default');
+    });
+
+    test('an ultrafast entry has no alias and does not cover standard', async () => {
+      await new Dispatcher().dispatch(chatRequest('test-alias@ultrafast'));
+      // OpenAI has no ultrafast capacity tier; it decays to the nearest priority.
+      expect(sentBody().service_tier).toBe('priority');
+      fetchMock.mockClear();
+
+      await expect(
+        new Dispatcher().dispatch(
+          withKeyPolicy(chatRequest('test-alias@standard'), {
+            allowedModels: ['test-alias@ultrafast'],
+          })
+        )
+      ).rejects.toMatchObject(denied('test-alias@standard'));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });
