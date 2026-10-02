@@ -1818,6 +1818,16 @@ packages/frontend/src/lib/normalize.ts:38 [function] toIsoString
 packages/frontend/src/lib/normalize.ts:4 [function] toBoolean
 packages/frontend/src/lib/piAiProvider.ts:22 [function] collectProviderEndpointUrls
 packages/frontend/src/lib/piAiProvider.ts:35 [function] isOAuthProviderDraft
+packages/frontend/src/lib/providerConnectionDraft.ts:102 [function] switchConnectionMode
+packages/frontend/src/lib/providerConnectionDraft.ts:18 [interface] ConnectionDraft
+packages/frontend/src/lib/providerConnectionDraft.ts:28 [interface] ConnectionDraftSource
+packages/frontend/src/lib/providerConnectionDraft.ts:36 [function] connectionModeOf
+packages/frontend/src/lib/providerConnectionDraft.ts:42 [function] cloneApiBaseUrl
+packages/frontend/src/lib/providerConnectionDraft.ts:52 [function] draftTypes
+packages/frontend/src/lib/providerConnectionDraft.ts:58 [function] captureConnectionDraft
+packages/frontend/src/lib/providerConnectionDraft.ts:68 [function] emptyUrlConnectionDraft
+packages/frontend/src/lib/providerConnectionDraft.ts:73 [function] oauthConnectionDraft
+packages/frontend/src/lib/providerConnectionDraft.ts:81 [function] applyConnectionDraft
 packages/frontend/src/lib/quota.ts:18 [function] statusForPercent
 packages/frontend/src/lib/quota.ts:30 [function] formatQuotaValue
 packages/frontend/src/lib/quota.ts:50 [function] quotaUsagePercent
@@ -1914,7 +1924,8 @@ packages/shared/src/provider-presets.ts:226 [function] findProviderPreset
 packages/shared/src/provider-presets.ts:238 [function] substitutePresetVars
 packages/shared/src/provider-presets.ts:257 [function] findUnresolvedPresetVars
 packages/shared/src/provider-presets.ts:269 [interface] ProviderPresetDraft
-packages/shared/src/provider-presets.ts:288 [function] applyProviderPreset
+packages/shared/src/provider-presets.ts:284 [interface] ApplyProviderPresetOptions
+packages/shared/src/provider-presets.ts:301 [function] applyProviderPreset
 packages/shared/src/provider-presets.ts:32 [function] isPresetUrl
 packages/shared/src/provider.ts:167 [function] responsesHost
 packages/shared/src/provider.ts:183 [function] getDefaultResponsesExtensions
