@@ -112,8 +112,10 @@ function findRequestedRaw(
 
   // Bedrock Converse (and ConverseStream) request shape.
   const nested = (body as any).serviceTier;
-  if (typeof nested === 'string') return readString(nested);
-  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+  if (typeof nested === 'string') {
+    const raw = readString(nested);
+    if (raw) return raw;
+  } else if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
     const type = readString((nested as any).type);
     if (type) return type;
   }
@@ -194,8 +196,10 @@ function findActualRaw(rawBody: any, apiBaseType?: string): string | null {
   // Bedrock Converse response (top-level), ConverseStream (`metadata` event),
   // and any provider that nests it under `usage`.
   for (const candidate of [body.serviceTier, body.metadata?.serviceTier, usage?.serviceTier]) {
-    if (typeof candidate === 'string') return readString(candidate);
-    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    if (typeof candidate === 'string') {
+      const raw = readString(candidate);
+      if (raw) return raw;
+    } else if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
       const type = readString((candidate as any).type);
       if (type) return type;
     }

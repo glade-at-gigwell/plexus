@@ -92,6 +92,19 @@ describe('extractRequestedServiceTier', () => {
     });
   });
 
+  test('an empty camelCase serviceTier falls through to service_tier and the Vertex header', () => {
+    expect(
+      extractRequestedServiceTier({ serviceTier: '', service_tier: 'flex' }, {}, 'chat')
+    ).toEqual({ tier: 'flex', raw: 'flex' });
+    expect(
+      extractRequestedServiceTier(
+        { serviceTier: '   ' },
+        { 'X-Vertex-AI-LLM-Shared-Request-Type': 'priority' },
+        'gemini'
+      )
+    ).toEqual({ tier: 'priority', raw: 'priority' });
+  });
+
   test('reads a Gemini service_tier body field', () => {
     expect(extractRequestedServiceTier({ service_tier: 'priority' }, {}, 'gemini').tier).toBe(
       'priority'
@@ -157,6 +170,25 @@ describe('extractActualServiceTier', () => {
         usageMetadata: { trafficType: 'ON_DEMAND_FLEX' },
       })
     ).toEqual({ tier: 'flex', raw: 'ON_DEMAND_FLEX' });
+  });
+
+  test('an empty camelCase serviceTier permits later candidate and top-level fallback', () => {
+    expect(extractActualServiceTierFromBody({ serviceTier: '', service_tier: 'flex' })).toEqual({
+      tier: 'flex',
+      raw: 'flex',
+    });
+    expect(
+      extractActualServiceTierFromBody({
+        serviceTier: '',
+        metadata: { serviceTier: { type: 'priority' } },
+      })
+    ).toEqual({ tier: 'priority', raw: 'priority' });
+    expect(
+      extractActualServiceTierFromBody({
+        serviceTier: '  ',
+        usage: { serviceTier: { type: 'reserved' } },
+      })
+    ).toEqual({ tier: 'reserved', raw: 'reserved' });
   });
 
   test('reads Bedrock top-level serviceTier.type', () => {

@@ -54,15 +54,22 @@ describe('getServiceTierDisplay', () => {
     expect(getServiceTierDisplay({ serviceTier: 'priority', serviceTierRaw: 'fast' })).toBeNull();
   });
 
-  it.each(['scale', 'reserved', 'performance', 'deferred', 'unknown'])(
-    'hides the unlisted %s tier',
-    (tier) => {
-      expect(getServiceTierDisplay({ requestedServiceTier: tier })).toBeNull();
-      expect(
-        getServiceTierDisplay({ serviceTier: tier, requestedServiceTier: 'priority' })
-      ).toBeNull();
-    }
-  );
+  it.each([
+    'scale',
+    'reserved',
+    'performance',
+    'deferred',
+    'unknown',
+    'constructor',
+    '__proto__',
+    'toString',
+    'hasOwnProperty',
+  ])('hides the unlisted %s tier', (tier) => {
+    expect(getServiceTierDisplay({ requestedServiceTier: tier })).toBeNull();
+    expect(
+      getServiceTierDisplay({ serviceTier: tier, requestedServiceTier: 'priority' })
+    ).toBeNull();
+  });
 
   it.each([
     ['flex', 'flex'],

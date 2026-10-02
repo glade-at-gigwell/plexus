@@ -60,7 +60,10 @@ export const getServiceTierDisplay = (
 
   const actual = log.serviceTier ?? null;
   const effective = actual ?? requested;
-  const tier = DISPLAY_SERVICE_TIERS[effective.toLowerCase()];
+  const key = effective.toLowerCase();
+  const tier = Object.prototype.hasOwnProperty.call(DISPLAY_SERVICE_TIERS, key)
+    ? DISPLAY_SERVICE_TIERS[key]
+    : undefined;
   if (!tier) return null;
 
   const tooltipParts: string[] = [];
