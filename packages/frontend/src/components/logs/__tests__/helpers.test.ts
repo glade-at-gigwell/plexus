@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getAttemptIndicatorLabel, hasUpstreamRewrite, isDecisionsApiType } from '../helpers';
+import {
+  getAttemptIndicatorLabel,
+  getServiceTierDisplay,
+  hasUpstreamRewrite,
+  isDecisionsApiType,
+} from '../helpers';
 
 describe('isDecisionsApiType', () => {
   it('recognizes the decisions ingress type', () => {
@@ -35,6 +40,76 @@ describe('getAttemptIndicatorLabel', () => {
 
   it('omits the indicator when the attempt count is missing', () => {
     expect(getAttemptIndicatorLabel()).toBeNull();
+  });
+});
+
+describe('getServiceTierDisplay', () => {
+  it('returns null when no tier metadata is present', () => {
+    expect(getServiceTierDisplay({})).toBeNull();
+    expect(getServiceTierDisplay({ serviceTier: null, requestedServiceTier: null })).toBeNull();
+  });
+
+  it('hides a provider-reported actual tier when the request did not ask for one', () => {
+    expect(getServiceTierDisplay({ serviceTier: 'default' })).toBeNull();
+    expect(getServiceTierDisplay({ serviceTier: 'priority', serviceTierRaw: 'fast' })).toBeNull();
+  });
+
+  it.each([
+    'scale',
+    'reserved',
+    'performance',
+    'deferred',
+    'unknown',
+    'constructor',
+    '__proto__',
+    'toString',
+    'hasOwnProperty',
+  ])('hides the unlisted %s tier', (tier) => {
+    expect(getServiceTierDisplay({ requestedServiceTier: tier })).toBeNull();
+    expect(
+      getServiceTierDisplay({ serviceTier: tier, requestedServiceTier: 'priority' })
+    ).toBeNull();
+  });
+
+  it.each([
+    ['flex', 'flex'],
+    ['priority', 'priority'],
+    ['ultrafast', 'ultrafast'],
+    ['default', 'default'],
+    ['auto', 'auto'],
+  ] as const)('maps the requested %s tier to %s', (requested, expected) => {
+    const tier = getServiceTierDisplay({ requestedServiceTier: requested });
+    expect(tier?.tier).toBe(expected);
+    expect(tier?.isActual).toBe(false);
+  });
+
+  it('uses the actual tier for the icon when the provider reports one', () => {
+    const tier = getServiceTierDisplay({
+      serviceTier: 'priority',
+      requestedServiceTier: 'flex',
+      serviceTierRaw: 'fast',
+      requestedServiceTierRaw: 'standard',
+    });
+    expect(tier?.tier).toBe('priority');
+    expect(tier?.isActual).toBe(true);
+    expect(tier?.label).toBe('Service tier: Priority');
+    expect(tier?.tooltip).toContain('Actual tier: Priority');
+    expect(tier?.tooltip).toContain('Native value: fast');
+    expect(tier?.tooltip).toContain('Requested tier: Flex');
+    expect(tier?.tooltip).toContain('Requested native value: standard');
+  });
+
+  it('says requested-only in the label when the actual tier was not reported', () => {
+    const tier = getServiceTierDisplay({
+      requestedServiceTier: 'priority',
+      requestedServiceTierRaw: 'fast',
+    });
+    expect(tier?.tier).toBe('priority');
+    expect(tier?.isActual).toBe(false);
+    expect(tier?.label).toBe('Requested service tier: Priority');
+    expect(tier?.tooltip).toContain('Requested tier: Priority');
+    expect(tier?.tooltip).toContain('Requested native value: fast');
+    expect(tier?.tooltip).toContain('Actual tier not reported');
   });
 });
 

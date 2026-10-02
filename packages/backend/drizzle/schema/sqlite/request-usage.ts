@@ -24,6 +24,12 @@ export const requestUsage = sqliteTable(
     allAttemptedProviders: text('all_attempted_providers'),
     outgoingApiType: text('outgoing_api_type'),
     reasoningEffort: text('reasoning_effort'),
+    // Service tier: requested (normalized/raw from the final outgoing request) and
+    // actual (normalized/raw provider-reported; null when the provider reported none)
+    requestedServiceTier: text('requested_service_tier'),
+    requestedServiceTierRaw: text('requested_service_tier_raw'),
+    serviceTier: text('service_tier'),
+    serviceTierRaw: text('service_tier_raw'),
     tokensInput: integer('tokens_input'),
     tokensOutput: integer('tokens_output'),
     tokensReasoning: integer('tokens_reasoning'),

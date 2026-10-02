@@ -143,6 +143,15 @@ export async function handleResponse(
   usageRecord.upstreamModel =
     unifiedResponse.plexus?.upstreamModel || usageRecord.finalAttemptModel || null;
 
+  // Service-tier metadata projected from the dispatcher: requested tier from the
+  // FINAL outgoing request, actual tier the provider reported (header-based here;
+  // the usage inspector refines the streaming/unary body case from the raw snapshot).
+  const plexusTiers = unifiedResponse.plexus;
+  usageRecord.requestedServiceTier = plexusTiers?.requestedServiceTier ?? null;
+  usageRecord.requestedServiceTierRaw = plexusTiers?.requestedServiceTierRaw ?? null;
+  usageRecord.serviceTier = plexusTiers?.serviceTier ?? null;
+  usageRecord.serviceTierRaw = plexusTiers?.serviceTierRaw ?? null;
+
   const outgoingApiType = unifiedResponse.plexus?.apiType?.toLowerCase();
   usageRecord.outgoingApiType = outgoingApiType?.toLocaleLowerCase();
   usageRecord.isStreamed = !!unifiedResponse.stream;

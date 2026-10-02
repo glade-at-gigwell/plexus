@@ -13,6 +13,8 @@ import {
   extractUsageCostDetails,
 } from '../../utils/usage-normalizer';
 import { applyProviderReportedCost, applyUsageCostDetails } from '../../utils/provider-cost';
+import { getApiBaseType } from '../../utils/api-format';
+import { extractActualServiceTier } from '../dispatch/service-tier-metadata';
 import { recordQuotaUsage } from '../quota/quota-middleware';
 import type { DebugLoggingInspector } from './debug-logging';
 
@@ -175,6 +177,7 @@ export class UsageInspector extends PassThrough {
     try {
       const debugManager = DebugManager.getInstance();
       const reconstructed = debugManager.getReconstructedRawResponse(this.usageRecord.requestId!);
+      this.applyActualServiceTier(reconstructed);
       const usage = this.readObservedUsage(debugManager, reconstructed);
 
       if (reconstructed || usage) {
@@ -379,6 +382,7 @@ export class UsageInspector extends PassThrough {
 
       const debugManager = DebugManager.getInstance();
       const reconstructed = debugManager.getReconstructedRawResponse(this.usageRecord.requestId!);
+      this.applyActualServiceTier(reconstructed);
       // Same read-raw-then-fallback as _flush (readObservedUsage): a stream
       // destroyed mid-flight can have usage only in the transformed-mode
       // snapshot, and without the fallback the cancelled/timeout record
@@ -408,6 +412,25 @@ export class UsageInspector extends PassThrough {
     }
 
     callback(err);
+  }
+
+  /**
+   * Overrides the usage record's actual service tier with a body/stream-reported
+   * value when the native response carried one. Leaves a header-derived fallback
+   * (set by the dispatcher, e.g. Gemini) untouched when the body reported nothing.
+   */
+  private applyActualServiceTier(reconstructed: any): void {
+    // Gemini's documented `x-gemini-service-tier` response header is
+    // authoritative over the response body. The dispatcher already projected
+    // that header onto the usage record for streaming responses, so a
+    // reconstructed (non-terminal) body must not overwrite it here.
+    if (getApiBaseType(this.providerApiType) === 'gemini' && this.usageRecord.serviceTierRaw) {
+      return;
+    }
+    const tier = extractActualServiceTier(reconstructed, undefined, this.providerApiType);
+    if (!tier.raw) return;
+    this.usageRecord.serviceTier = tier.tier;
+    this.usageRecord.serviceTierRaw = tier.raw;
   }
 
   /**

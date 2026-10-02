@@ -45,6 +45,10 @@ export const USAGE_PAGE_FIELDS: UsageRecordField[] = [
   'incomingModelAlias',
   'provider',
   'apiKey',
+  'requestedServiceTier',
+  'serviceTier',
+  'requestedServiceTierRaw',
+  'serviceTierRaw',
 ];
 
 export const normalizeNow = (): Date => {

@@ -398,6 +398,36 @@ describe('executeStandardAttempt — thinking-signature strip-and-retry', () => 
     expect(providerPayload).toEqual(snapshot);
   });
 
+  it('clears the requested tier when a strip retry removes service_tier and the final attempt fails terminally', async () => {
+    const stripBody = JSON.stringify({
+      error: { message: 'Unsupported parameter: service_tier' },
+    });
+    const executeProviderRequest = vi
+      .fn()
+      .mockImplementation(async () => new Response(stripBody, { status: 400 }));
+    const handleProviderError = vi.fn(async () => {
+      throw new Error('HTTP 400: unsupported parameter');
+    });
+    const host = makeHost({ executeProviderRequest, handleProviderError });
+
+    const providerPayload = { model: 'model-1', service_tier: 'flex' };
+    const context = makeContext(host, providerPayload, {
+      targetApiType: 'chat',
+      hasNextTarget: false,
+    });
+
+    await expect(executeStandardAttempt(context)).rejects.toMatchObject({
+      routingContext: { requestedServiceTier: null, requestedServiceTierRaw: null },
+    });
+
+    // Initial attempt sent service_tier; the same-target strip retry did not.
+    expect(executeProviderRequest).toHaveBeenCalledTimes(2);
+    expect(executeProviderRequest.mock.calls[0]![2]).toHaveProperty('service_tier', 'flex');
+    expect(executeProviderRequest.mock.calls[1]![2]).not.toHaveProperty('service_tier');
+    // The original payload was never mutated by the copy-on-write strip.
+    expect(providerPayload).toEqual({ model: 'model-1', service_tier: 'flex' });
+  });
+
   it('retries on early stream error from probeStreamingStart', async () => {
     const executeProviderRequest = vi.fn(
       async () =>

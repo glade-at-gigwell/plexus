@@ -60,9 +60,11 @@ import {
   formatDateSafely,
   formatReasoningEffort,
   getAttemptIndicatorLabel,
+  getServiceTierDisplay,
   hasUpstreamRewrite,
 } from './helpers';
 import { ApiTypeIcon } from './ApiTypeIcon';
+import { ServiceTierIndicator } from './ServiceTierIndicator';
 import type { DesktopLogRowProps } from './types';
 
 export const DesktopLogRow = React.memo(
@@ -386,22 +388,32 @@ export const DesktopLogRow = React.memo(
                 </button>
               )}
             </div>
-            {formatReasoningEffort(log.reasoningEffort) && (
-              <div className="flex min-w-0 items-center gap-1">
-                <BrainCog
-                  size={12}
-                  className="shrink-0 text-purple-400"
-                  role="img"
-                  aria-label="Effort"
-                />
-                <span
-                  className="truncate"
-                  style={{ color: 'var(--color-text-secondary)', fontSize: '0.85em' }}
-                >
-                  {formatReasoningEffort(log.reasoningEffort)}
-                </span>
-              </div>
-            )}
+            {(() => {
+              const reasoning = formatReasoningEffort(log.reasoningEffort);
+              const tier = getServiceTierDisplay(log);
+              if (!reasoning && !tier) return null;
+              return (
+                <div className="flex min-w-0 items-center gap-1">
+                  {reasoning && (
+                    <>
+                      <BrainCog
+                        size={12}
+                        className="shrink-0 text-purple-400"
+                        role="img"
+                        aria-label="Effort"
+                      />
+                      <span
+                        className="truncate"
+                        style={{ color: 'var(--color-text-secondary)', fontSize: '0.85em' }}
+                      >
+                        {reasoning}
+                      </span>
+                    </>
+                  )}
+                  {tier && <ServiceTierIndicator display={tier} />}
+                </div>
+              );
+            })()}
             {log.isVisionFallthrough && log.visionFallthroughModel && (
               <div
                 className="group/vft flex min-w-0 items-center gap-1"

@@ -22,6 +22,7 @@ import { ConcurrencyTracker } from '../services/runtime/concurrency-tracker';
 import { wireEarlyDisconnectDetection } from '../utils/timeout';
 import { DEFAULT_STALL_CONFIG } from '../utils/stall';
 import {
+  BedrockEventStreamMetadataObserver,
   DebugLoggingInspector,
   extractUsageFromReconstructed,
   StallInspector,
@@ -36,6 +37,10 @@ import {
   filterRawResponseHeaders,
   validateRawProviderSlug,
 } from '../services/dispatch/raw-passthrough';
+import {
+  extractActualServiceTier,
+  extractRequestedServiceTier,
+} from '../services/dispatch/service-tier-metadata';
 
 const RAW_METHODS = ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'PUT'] as const;
 
@@ -55,6 +60,11 @@ function inferObservedApiType(rawSuffix: string): string {
   if (pathname.includes(':generatecontent') || pathname.includes(':streamgeneratecontent')) {
     return 'gemini';
   }
+  // Bedrock Converse unary responses are a single JSON object; ConverseStream
+  // is an AWS event-stream binary that the SSE reconstructor cannot read, so it
+  // gets its own type observed by BedrockEventStreamMetadataObserver.
+  if (pathname.endsWith('/converse-stream')) return 'bedrock-converse-stream';
+  if (pathname.endsWith('/converse')) return 'bedrock-converse';
   return 'unknown';
 }
 
@@ -236,6 +246,10 @@ export async function registerRawPassthroughRoutes(
             : '';
         const rawModel = requestedModel;
         const observedApiType = inferObservedApiType(rawSuffix);
+        const bedrockEventStreamObserver =
+          observedApiType === 'bedrock-converse-stream'
+            ? new BedrockEventStreamMetadataObserver()
+            : null;
         const usageRecord: Partial<UsageRecord> = {
           requestId,
           clientRequestId,
@@ -357,12 +371,22 @@ export async function registerRawPassthroughRoutes(
         }, timeoutMs);
         timeout.unref?.();
 
+        let capturedResponseHeaders: Record<string, string | string[]> | undefined;
         try {
           const upstreamHeaders = buildRawUpstreamHeaders(
             request.headers,
             provider,
             body ? body.byteLength : null
           );
+          const requestedTier = extractRequestedServiceTier(
+            parsedBody,
+            upstreamHeaders as Record<string, unknown>,
+            observedApiType
+          );
+          if (requestedTier.raw) {
+            usageRecord.requestedServiceTier = requestedTier.tier;
+            usageRecord.requestedServiceTierRaw = requestedTier.raw;
+          }
           const upstream = await executeRawUpstreamRequest({
             url: upstreamUrl,
             method: request.method,
@@ -372,6 +396,7 @@ export async function registerRawPassthroughRoutes(
           });
 
           const responseHeaders = filterRawResponseHeaders(upstream.headers);
+          capturedResponseHeaders = responseHeaders;
           const quotaHeaders = quotaEnforcer
             ? buildQuotaHeaders((request as any).quotaContext ?? null, providerSlug, rawModel)
             : {};
@@ -446,6 +471,7 @@ export async function registerRawPassthroughRoutes(
           try {
             for await (const chunk of stallInspector) {
               const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              bedrockEventStreamObserver?.feed(buffer);
               rawResponseInspector.write(buffer);
               transformedResponseInspector.write(buffer);
               if (captureErrorBody) errorResponseChunks.push(buffer);
@@ -464,7 +490,18 @@ export async function registerRawPassthroughRoutes(
             finished(rawResponseInspector),
             finished(transformedResponseInspector),
           ]);
-          const reconstructed = debugManager.getReconstructedRawResponse(requestId);
+          const reconstructed =
+            bedrockEventStreamObserver?.getReconstructed() ??
+            debugManager.getReconstructedRawResponse(requestId);
+          const actualTier = extractActualServiceTier(
+            reconstructed,
+            responseHeaders as Record<string, unknown>,
+            observedApiType
+          );
+          if (actualTier.raw) {
+            usageRecord.serviceTier = actualTier.tier;
+            usageRecord.serviceTierRaw = actualTier.raw;
+          }
           applyObservedUsage(
             usageRecord,
             reconstructed,
@@ -505,6 +542,22 @@ export async function registerRawPassthroughRoutes(
               ? 'cancelled'
               : 'error';
           usageRecord.durationMs = Date.now() - startTime;
+          // A cancelled/timeout stream is torn down before the normal finalize
+          // path runs, so read whatever the debug/binary tap captured so far and
+          // only persist an actual tier the provider actually observed — never
+          // the requested tier.
+          const reconstructed =
+            bedrockEventStreamObserver?.getReconstructed() ??
+            debugManager.getReconstructedRawResponse(requestId);
+          const actualTier = extractActualServiceTier(
+            reconstructed,
+            capturedResponseHeaders as Record<string, unknown> | undefined,
+            observedApiType
+          );
+          if (actualTier.raw) {
+            usageRecord.serviceTier = actualTier.tier;
+            usageRecord.serviceTierRaw = actualTier.raw;
+          }
           usageStorage.saveRequest(usageRecord as UsageRecord);
           if (!isClientDisconnect) {
             usageStorage.saveError(requestId, error, {
@@ -529,6 +582,7 @@ export async function registerRawPassthroughRoutes(
           }
           if (!reply.raw.writableEnded) reply.raw.end();
         } finally {
+          bedrockEventStreamObserver?.close();
           usageStorage.deregisterInFlight(requestId);
           if (quotaEnforcer) {
             await recordQuotaUsage(

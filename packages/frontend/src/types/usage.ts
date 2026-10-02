@@ -97,6 +97,11 @@ export interface UsageRecord {
   allAttemptedProviders?: string | null;
   outgoingApiType?: string;
   reasoningEffort?: string | null;
+  // Service tier metadata
+  requestedServiceTier?: string | null;
+  serviceTier?: string | null;
+  requestedServiceTierRaw?: string | null;
+  serviceTierRaw?: string | null;
   tokensInput?: number;
   tokensOutput?: number;
   tokensReasoning?: number;

@@ -395,6 +395,12 @@ export class UsageStorageService extends EventEmitter {
         if (record.selectedModelName) updateSet.selectedModelName = record.selectedModelName;
         if (record.reasoningEffort !== undefined)
           updateSet.reasoningEffort = record.reasoningEffort;
+        if (record.requestedServiceTier !== undefined)
+          updateSet.requestedServiceTier = record.requestedServiceTier;
+        if (record.requestedServiceTierRaw !== undefined)
+          updateSet.requestedServiceTierRaw = record.requestedServiceTierRaw;
+        if (record.serviceTier !== undefined) updateSet.serviceTier = record.serviceTier;
+        if (record.serviceTierRaw !== undefined) updateSet.serviceTierRaw = record.serviceTierRaw;
         if (record.incomingModelAlias) updateSet.incomingModelAlias = record.incomingModelAlias;
         if (record.apiKey) updateSet.apiKey = record.apiKey;
         if (record.attribution !== undefined) updateSet.attribution = record.attribution;
@@ -794,6 +800,10 @@ export class UsageStorageService extends EventEmitter {
           allAttemptedProviders: schema.requestUsage.allAttemptedProviders,
           outgoingApiType: schema.requestUsage.outgoingApiType,
           reasoningEffort: schema.requestUsage.reasoningEffort,
+          requestedServiceTier: schema.requestUsage.requestedServiceTier,
+          requestedServiceTierRaw: schema.requestUsage.requestedServiceTierRaw,
+          serviceTier: schema.requestUsage.serviceTier,
+          serviceTierRaw: schema.requestUsage.serviceTierRaw,
           tokensInput: schema.requestUsage.tokensInput,
           tokensOutput: schema.requestUsage.tokensOutput,
           tokensReasoning: schema.requestUsage.tokensReasoning,
@@ -855,6 +865,10 @@ export class UsageStorageService extends EventEmitter {
         allAttemptedProviders: row.allAttemptedProviders,
         outgoingApiType: row.outgoingApiType,
         reasoningEffort: row.reasoningEffort,
+        requestedServiceTier: row.requestedServiceTier,
+        requestedServiceTierRaw: row.requestedServiceTierRaw,
+        serviceTier: row.serviceTier,
+        serviceTierRaw: row.serviceTierRaw,
         tokensInput: row.tokensInput,
         tokensOutput: row.tokensOutput,
         tokensReasoning: row.tokensReasoning,
