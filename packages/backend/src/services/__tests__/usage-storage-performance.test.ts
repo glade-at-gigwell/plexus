@@ -353,6 +353,10 @@ describe('UsageStorageService performance metrics', () => {
       finalAttemptModel: 'model-6',
       allAttemptedProviders: JSON.stringify(['provider-e/model-5', 'provider-f/model-6']),
       outgoingApiType: 'chat',
+      requestedServiceTier: 'priority',
+      requestedServiceTierRaw: 'fast',
+      serviceTier: 'flex',
+      serviceTierRaw: 'ON_DEMAND_FLEX',
       tokensInput: 10,
       tokensOutput: 20,
       tokensReasoning: 0,
@@ -379,6 +383,10 @@ describe('UsageStorageService performance metrics', () => {
 
     expect(row?.retryHistory).toBe(retryHistory);
     expect(row?.attemptCount).toBe(2);
+    expect(row?.requestedServiceTier).toBe('priority');
+    expect(row?.requestedServiceTierRaw).toBe('fast');
+    expect(row?.serviceTier).toBe('flex');
+    expect(row?.serviceTierRaw).toBe('ON_DEMAND_FLEX');
   });
 
   it('emitStartedAsync and emitUpdatedAsync are non-blocking and preserve task order', async () => {

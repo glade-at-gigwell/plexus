@@ -51,7 +51,10 @@ function withKeyPolicy(
   request: UnifiedChatRequest,
   policy: { allowedModels?: string[]; excludedModels?: string[] }
 ): UnifiedChatRequest {
-  return { ...request, metadata: { plexus_metadata: { plexus_key_policy: policy } } };
+  return {
+    ...request,
+    metadata: { plexus_metadata: { plexus_key_policy: policy } },
+  };
 }
 
 function successChatResponse() {
@@ -61,7 +64,13 @@ function successChatResponse() {
       object: 'chat.completion',
       created: 1,
       model: 'model-1',
-      choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: 'ok' },
+          finish_reason: 'stop',
+        },
+      ],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -88,7 +97,10 @@ describe('Dispatcher service-tier suffix', () => {
     await new Dispatcher().dispatch(chatRequest('test-alias@flex'));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(sentBody()).toMatchObject({ model: 'model-1', service_tier: 'flex' });
+    expect(sentBody()).toMatchObject({
+      model: 'model-1',
+      service_tier: 'flex',
+    });
   });
 
   test('a plain alias sends no service_tier', async () => {
@@ -142,6 +154,117 @@ describe('Dispatcher service-tier suffix', () => {
     expect(request.serviceTier).toBe('flex');
   });
 
+  test('records the requested tier from the final outgoing payload', async () => {
+    const response = await new Dispatcher().dispatch(chatRequest('test-alias@flex'));
+
+    expect(response.plexus?.requestedServiceTier).toBe('flex');
+    expect(response.plexus?.requestedServiceTierRaw).toBe('flex');
+  });
+
+  test('records the provider-reported actual tier from the native response', async () => {
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'chatcmpl-1',
+            object: 'chat.completion',
+            created: 1,
+            model: 'model-1',
+            service_tier: 'priority',
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: 'ok' },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+    );
+
+    const response = await new Dispatcher().dispatch(chatRequest('test-alias@flex'));
+
+    expect(response.plexus?.serviceTier).toBe('priority');
+    expect(response.plexus?.serviceTierRaw).toBe('priority');
+  });
+
+  test('actual stays null when the provider reports none, even if a tier was requested', async () => {
+    const response = await new Dispatcher().dispatch(chatRequest('test-alias@flex'));
+
+    expect(response.plexus?.requestedServiceTier).toBe('flex');
+    expect(response.plexus?.serviceTier ?? null).toBeNull();
+    expect(response.plexus?.serviceTierRaw ?? null).toBeNull();
+  });
+
+  test('requested tier reflects the final successful attempt, not a stale retry', async () => {
+    const config = makeConfig();
+    config.providers.p2 = {
+      type: 'chat',
+      api_base_url: 'https://p2.example.com/v1',
+      api_key: 'test-key-p2',
+      models: { 'model-2': {} },
+      extraBody: { service_tier: 'default' },
+    };
+    config.models['test-alias'].targets = [
+      { provider: 'p1', model: 'model-1' },
+      { provider: 'p2', model: 'model-2' },
+    ];
+    setConfigForTesting(config);
+
+    let calls = 0;
+    fetchMock.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) return new Response('upstream boom', { status: 500 });
+      return successChatResponse();
+    });
+
+    const response = await new Dispatcher().dispatch(chatRequest('test-alias@flex'));
+
+    // p1 (no override) would have sent flex; the final p2 attempt's extraBody
+    // winning at 'default' proves the capture is from the final attempt.
+    expect(response.plexus?.finalAttemptProvider).toBe('p2');
+    expect(response.plexus?.requestedServiceTier).toBe('default');
+    expect(response.plexus?.requestedServiceTierRaw).toBe('default');
+  });
+
+  test('a failed final attempt carries the requested tier on its routing context', async () => {
+    fetchMock.mockImplementation(async () => new Response('upstream boom', { status: 500 }));
+
+    await expect(new Dispatcher().dispatch(chatRequest('test-alias@flex'))).rejects.toMatchObject({
+      routingContext: {
+        requestedServiceTier: 'flex',
+        requestedServiceTierRaw: 'flex',
+      },
+    });
+  });
+
+  test('a terminal failure after service_tier was stripped reports no requested tier', async () => {
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { message: 'Unsupported parameter: service_tier' } }),
+          {
+            status: 400,
+          }
+        )
+    );
+
+    await expect(new Dispatcher().dispatch(chatRequest('test-alias@flex'))).rejects.toMatchObject({
+      routingContext: {
+        requestedServiceTier: null,
+        requestedServiceTierRaw: null,
+      },
+    });
+
+    // Initial attempt + one same-target strip retry; the retry no longer
+    // carried service_tier, so neither does the failure record.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const finalCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as any[];
+    expect(JSON.parse(finalCall[1].body as string)).not.toHaveProperty('service_tier');
+  });
+
   test('an unknown alias with a suffix fails as not found under the name sent', async () => {
     await expect(new Dispatcher().dispatch(chatRequest('nope@flex'))).rejects.toThrow(
       "Model 'nope@flex' not found in configuration"
@@ -158,7 +281,9 @@ describe('Dispatcher service-tier suffix', () => {
     test('excluding the alias also excludes every tier of it', async () => {
       await expect(
         new Dispatcher().dispatch(
-          withKeyPolicy(chatRequest('test-alias@flex'), { excludedModels: ['test-alias'] })
+          withKeyPolicy(chatRequest('test-alias@flex'), {
+            excludedModels: ['test-alias'],
+          })
         )
       ).rejects.toMatchObject(denied('test-alias@flex'));
       expect(fetchMock).not.toHaveBeenCalled();
@@ -166,7 +291,9 @@ describe('Dispatcher service-tier suffix', () => {
 
     test('allowing the alias allows its tiers', async () => {
       await new Dispatcher().dispatch(
-        withKeyPolicy(chatRequest('test-alias@flex'), { allowedModels: ['test-alias'] })
+        withKeyPolicy(chatRequest('test-alias@flex'), {
+          allowedModels: ['test-alias'],
+        })
       );
 
       expect(sentBody().service_tier).toBe('flex');
@@ -202,7 +329,9 @@ describe('Dispatcher service-tier suffix', () => {
     test('a tier entry covers the tier however the client capitalises it', async () => {
       await expect(
         new Dispatcher().dispatch(
-          withKeyPolicy(chatRequest('test-alias@FLEX'), { excludedModels: ['test-alias@flex'] })
+          withKeyPolicy(chatRequest('test-alias@FLEX'), {
+            excludedModels: ['test-alias@flex'],
+          })
         )
       ).rejects.toMatchObject(denied('test-alias@FLEX'));
       expect(fetchMock).not.toHaveBeenCalled();
@@ -228,14 +357,18 @@ describe('Dispatcher service-tier suffix', () => {
 
       // What goes upstream is still the spelling the client chose.
       await new Dispatcher().dispatch(
-        withKeyPolicy(chatRequest('test-alias@fast'), { allowedModels: ['test-alias@priority'] })
+        withKeyPolicy(chatRequest('test-alias@fast'), {
+          allowedModels: ['test-alias@priority'],
+        })
       );
       expect(sentBody().service_tier).toBe('fast');
       fetchMock.mockClear();
 
       await expect(
         new Dispatcher().dispatch(
-          withKeyPolicy(chatRequest('test-alias@flex'), { allowedModels: ['test-alias@priority'] })
+          withKeyPolicy(chatRequest('test-alias@flex'), {
+            allowedModels: ['test-alias@priority'],
+          })
         )
       ).rejects.toMatchObject(denied('test-alias@flex'));
       expect(fetchMock).not.toHaveBeenCalled();

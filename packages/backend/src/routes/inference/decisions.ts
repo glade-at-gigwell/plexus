@@ -19,6 +19,7 @@ import {
 } from '../../services/quota/quota-middleware';
 import { saveQuotaBlockedUsage, saveQuotaExceededUsage } from './_quota-error';
 import { sanitizeHeaders } from '../../utils/sanitize-headers';
+import { applyRequestedServiceTierFromError } from '../../services/dispatch/service-tier-metadata';
 import { CLIENT_REQUEST_ID_HEADER, getClientRequestId } from '../../utils/client-request-id';
 
 export async function registerDecisionsRoute(
@@ -127,6 +128,10 @@ export async function registerDecisionsRoute(
       usageRecord.canonicalModelName = unifiedResponse.plexus?.canonicalModel;
       usageRecord.outgoingApiType =
         unifiedResponse.plexus?.targetApiType ?? unifiedResponse.plexus?.apiType ?? null;
+      usageRecord.requestedServiceTier = unifiedResponse.plexus?.requestedServiceTier ?? null;
+      usageRecord.requestedServiceTierRaw = unifiedResponse.plexus?.requestedServiceTierRaw ?? null;
+      usageRecord.serviceTier = unifiedResponse.plexus?.serviceTier ?? null;
+      usageRecord.serviceTierRaw = unifiedResponse.plexus?.serviceTierRaw ?? null;
       usageRecord.isPassthrough = false;
       usageRecord.tokensInput = unifiedResponse.usage?.input_tokens ?? null;
       usageRecord.tokensOutput = unifiedResponse.usage?.output_tokens ?? null;
@@ -206,6 +211,7 @@ export async function registerDecisionsRoute(
       usageRecord.durationMs = Date.now() - startTime;
       usageRecord.attemptCount = e.routingContext?.attemptCount || usageRecord.attemptCount || 1;
       usageRecord.retryHistory = e.routingContext?.retryHistory || usageRecord.retryHistory || null;
+      applyRequestedServiceTierFromError(usageRecord, e);
       usageStorage.saveRequest(usageRecord as UsageRecord);
 
       const errorDetails = {

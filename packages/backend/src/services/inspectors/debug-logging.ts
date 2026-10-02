@@ -195,6 +195,16 @@ export class DebugLoggingInspector extends BaseInspector {
         case 'gemini':
           reconstructed = this.reconstructGemini(rawBody);
           break;
+        // Bedrock Converse unary responses are a single JSON object; the chat
+        // reconstructor returns the parsed object unchanged for that shape.
+        // ConverseStream is an AWS event-stream binary and is intentionally
+        // NOT reconstructed here (no SSE frames to read); raw-passthrough
+        // observes its `metadata` event with BedrockEventStreamMetadataObserver.
+        case 'bedrock-converse':
+          reconstructed = this.reconstructChatCompletions(rawBody);
+          break;
+        case 'bedrock-converse-stream':
+          break;
         case 'oauth':
           reconstructed = this.reconstructOAuth(rawBody);
           break;

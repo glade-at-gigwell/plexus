@@ -18,6 +18,13 @@ export interface UsageRecord {
   allAttemptedProviders: string | null;
   outgoingApiType: string | null;
   reasoningEffort?: string | null;
+  // Service tier metadata. request* captures the FINAL provider-bound request;
+  // serviceTier* captures only what the provider actually reported (never inferred
+  // from the request). Raw fields preserve the provider's exact spelling.
+  requestedServiceTier?: string | null;
+  requestedServiceTierRaw?: string | null;
+  serviceTier?: string | null;
+  serviceTierRaw?: string | null;
   tokensInput: number | null;
   tokensOutput: number | null;
   tokensReasoning: number | null;

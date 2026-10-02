@@ -29,6 +29,36 @@ import {
   MAX_UNSUPPORTED_PARAM_STRIP_RETRIES,
 } from './dispatcher-auto-compat';
 import { EMPTY_COMPLETION_REASON, isEmptyUnifiedResponse } from './empty-completion';
+import { extractRequestedServiceTier, type ServiceTierCapture } from './service-tier-metadata';
+
+function attachRequestedServiceTier(
+  response: UnifiedChatResponse,
+  payload: any,
+  headers: Record<string, string>,
+  apiBaseType: string
+): void {
+  const capture = extractRequestedServiceTier(payload, headers, apiBaseType);
+  if (!capture.raw) return;
+  (response as any).plexus = {
+    ...((response as any).plexus || {}),
+    requestedServiceTier: capture.tier,
+    requestedServiceTierRaw: capture.raw,
+  };
+}
+
+/**
+ * Records the FINAL attempted request's requested tier on an attempt error's
+ * routing context. Always written (null included) so a stale value from an
+ * earlier attempt can't survive a later attempt that dropped the tier.
+ */
+function attachRequestedServiceTierToError(error: any, capture: ServiceTierCapture): void {
+  if (!error) return;
+  error.routingContext = {
+    ...(error.routingContext || {}),
+    requestedServiceTier: capture.tier,
+    requestedServiceTierRaw: capture.raw,
+  };
+}
 
 export type StandardAttemptResult =
   | { outcome: 'success'; response: UnifiedChatResponse }
@@ -90,6 +120,26 @@ export interface StandardAttemptContext {
 export async function executeStandardAttempt(
   context: StandardAttemptContext
 ): Promise<StandardAttemptResult> {
+  // The requested service tier must reflect the FINAL provider-bound request
+  // (after copy-on-write strip retries or an OAuth header rebuild), not the
+  // stale pre-loop payload/headers the caller still holds. The attempt loop
+  // records it at each fetch boundary; this outer catch guarantees every
+  // thrown error carries it out to the caller's failure handler.
+  const attemptedTier: { current: ServiceTierCapture } = {
+    current: { tier: null, raw: null },
+  };
+  try {
+    return await runStandardAttempt(context, attemptedTier);
+  } catch (error: any) {
+    attachRequestedServiceTierToError(error, attemptedTier.current);
+    throw error;
+  }
+}
+
+async function runStandardAttempt(
+  context: StandardAttemptContext,
+  attemptedTier: { current: ServiceTierCapture }
+): Promise<StandardAttemptResult> {
   const {
     host,
     request: currentRequest,
@@ -111,6 +161,14 @@ export async function executeStandardAttempt(
     sessionKey,
     release: doRelease,
   } = context;
+
+  // Retry outcomes travel back to the caller as values (not throws), so they
+  // must be tagged here too — the outer catch only covers thrown errors.
+  const retry = (error: any): StandardAttemptResult => {
+    attachRequestedServiceTierToError(error, attemptedTier.current);
+    return { outcome: 'retry', error };
+  };
+
   // Mutable (not const): the unsupported-param strip-and-retry path below
   // rebuilds this via copy-on-write (deleteDottedPath) rather than mutating
   // in place, so a successful strip must reassign this binding.
@@ -173,6 +231,12 @@ export async function executeStandardAttempt(
     // current payload, so a strip that removed `speed` also loses the auto beta.
     headers = { ...baseHeaders };
     applyAutoAnthropicBetas(headers, providerPayload, targetApiType);
+
+    // Capture the EXACT payload/headers this iteration will send. Re-captured
+    // every iteration so a copy-on-write strip retry or an OAuth header
+    // rebuild (which `continue`s back through here) is reflected, and the
+    // final failure never falls back to the stale pre-loop request.
+    attemptedTier.current = extractRequestedServiceTier(providerPayload, headers, targetApiType);
 
     logger.silly('Upstream Request Payload', providerPayload);
 
@@ -257,7 +321,7 @@ export async function executeStandardAttempt(
               `TTFB stall: fetch timed out after ${ttfbMs}ms for ${route.provider}/${route.model}, retrying with next provider`
             );
             doRelease();
-            return { outcome: 'retry', error: stallError };
+            return retry(stallError);
           }
           doRelease();
           throw stallError;
@@ -480,7 +544,7 @@ export async function executeStandardAttempt(
           logger.warn(
             `Failover: retrying after HTTP ${response.status} from ${route.provider}/${route.model}`
           );
-          return { outcome: 'retry', error: e };
+          return retry(e);
         }
 
         doRelease();
@@ -537,7 +601,7 @@ export async function executeStandardAttempt(
           `Failover: retrying stream before first byte after ${route.provider}/${route.model} failure: ${error.message}`
         );
         doRelease();
-        return { outcome: 'retry', error };
+        return retry(error);
       }
 
       if ((error as any).isStreamError || (error as any).routingContext?.cooldownTriggered) {
@@ -614,6 +678,7 @@ export async function executeStandardAttempt(
       targetApiType,
       upstreamModel
     );
+    attachRequestedServiceTier(streamResponse, providerPayload, headers, targetApiType);
     attemptTimeout.cleanup();
     return { outcome: 'success', response: streamResponse };
   }
@@ -688,7 +753,7 @@ export async function executeStandardAttempt(
     logger.warn(
       `Failover: retrying after empty completion (no visible output) from ${route.provider}/${route.model}`
     );
-    return { outcome: 'retry', error: emptyCompletionError };
+    return retry(emptyCompletionError);
   }
 
   await host.recordAttemptMetric(route, currentRequest.requestId, true, {
@@ -712,6 +777,7 @@ export async function executeStandardAttempt(
     targetApiType,
     upstreamModel
   );
+  attachRequestedServiceTier(nonStreamingResponse, providerPayload, headers, targetApiType);
   doRelease();
   attemptTimeout.cleanup();
   return { outcome: 'success', response: nonStreamingResponse };

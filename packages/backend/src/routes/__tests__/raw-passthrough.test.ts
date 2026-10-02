@@ -1,5 +1,6 @@
 import http from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { EventStreamCodec } from '@smithy/core/event-streams';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { setConfigForTesting } from '../../config';
 import { registerRawPassthroughRoutes } from '../raw-passthrough';
@@ -424,6 +425,46 @@ describe('raw passthrough routes', () => {
         transformedResponse: expect.stringContaining('data: [DONE]'),
         rawResponseSnapshot: expect.objectContaining({ usage: expect.any(Object) }),
         transformedResponseSnapshot: expect.objectContaining({ usage: expect.any(Object) }),
+      })
+    );
+  });
+
+  test('captures the actual Bedrock ConverseStream tier from the binary metadata event without changing bytes', async () => {
+    const codec = new EventStreamCodec(
+      (input: Uint8Array) => new TextDecoder().decode(input),
+      (input: string) => new TextEncoder().encode(input)
+    );
+    const frame = Buffer.from(
+      codec.encode({
+        headers: {
+          ':message-type': { type: 'string', value: 'event' },
+          ':event-type': { type: 'string', value: 'metadata' },
+          ':content-type': { type: 'string', value: 'application/json' },
+        },
+        body: new TextEncoder().encode(
+          JSON.stringify({
+            usage: { inputTokens: 11, outputTokens: 2 },
+            serviceTier: { type: 'priority' },
+          })
+        ),
+      })
+    );
+    upstreamResponseHeaders = { 'content-type': 'application/vnd.amazon.eventstream' };
+    upstreamResponseBody = frame;
+
+    const response = await fastify.inject({
+      method: 'POST',
+      url: '/raw/openrouter/model/anthropic.claude-3-5-sonnet/converse-stream',
+      headers: { authorization: 'Bearer plexus-secret', 'content-type': 'application/json' },
+      payload: JSON.stringify({ messages: [], serviceTier: { type: 'priority' } }),
+    });
+
+    expect(response.rawPayload).toEqual(frame);
+    expect(usageStorage.saveRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestedServiceTier: 'priority',
+        serviceTier: 'priority',
+        serviceTierRaw: 'priority',
       })
     );
   });

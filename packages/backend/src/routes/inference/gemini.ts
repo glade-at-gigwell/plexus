@@ -5,6 +5,7 @@ import { GeminiTransformer } from '../../transformers';
 import { UsageStorageService } from '../../services/observability/usage-storage';
 import { UsageRecord } from '../../types/usage';
 import { handleResponse } from '../../services/responses/response-handler';
+import { applyRequestedServiceTierFromError } from '../../services/dispatch/service-tier-metadata';
 import { getClientIp } from '../../utils/ip';
 import { DebugManager } from '../../services/observability/debug-manager';
 import { QuotaEnforcer } from '../../services/quota/quota-enforcer';
@@ -128,6 +129,10 @@ export async function registerGeminiRoute(
         selectedModelName: unifiedResponse.plexus?.model,
         canonicalModelName: unifiedResponse.plexus?.canonicalModel,
         reasoningEffort: usageRecord.reasoningEffort,
+        requestedServiceTier: unifiedResponse.plexus?.requestedServiceTier,
+        requestedServiceTierRaw: unifiedResponse.plexus?.requestedServiceTierRaw,
+        serviceTier: unifiedResponse.plexus?.serviceTier,
+        serviceTierRaw: unifiedResponse.plexus?.serviceTierRaw,
       });
 
       // Determine if token estimation is needed
@@ -166,6 +171,7 @@ export async function registerGeminiRoute(
         usageRecord.attemptCount = e.routingContext?.attemptCount || usageRecord.attemptCount || 1;
         usageRecord.retryHistory =
           e.routingContext?.retryHistory || usageRecord.retryHistory || null;
+        applyRequestedServiceTierFromError(usageRecord, e);
         usageStorage.saveRequest(usageRecord as UsageRecord);
         logger.info(
           `Request ${requestId}: ${e.message}, usage recorded as ${e?.routingContext?.code === 'upstream_timeout' ? 'timeout' : 'cancelled'}`
@@ -181,6 +187,7 @@ export async function registerGeminiRoute(
       usageRecord.durationMs = Date.now() - startTime;
       usageRecord.attemptCount = e.routingContext?.attemptCount || usageRecord.attemptCount || 1;
       usageRecord.retryHistory = e.routingContext?.retryHistory || usageRecord.retryHistory || null;
+      applyRequestedServiceTierFromError(usageRecord, e);
       usageStorage.saveRequest(usageRecord as UsageRecord);
 
       // Extract routing context if available from enriched error

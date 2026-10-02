@@ -25,9 +25,11 @@ import {
   formatDateSafely,
   formatReasoningEffort,
   getAttemptIndicatorLabel,
+  getServiceTierDisplay,
   hasUpstreamRewrite,
 } from './helpers';
 import { ApiTypeIcon } from './ApiTypeIcon';
+import { ServiceTierIndicator } from './ServiceTierIndicator';
 import type { LogRowProps } from './types';
 
 export const MobileLogRow = React.memo(
@@ -166,17 +168,27 @@ export const MobileLogRow = React.memo(
         </div>
 
         <div className="mt-1 space-y-1">
-          {formatReasoningEffort(log.reasoningEffort) && (
-            <div className="flex items-center gap-1 truncate text-[10px] font-normal text-text-secondary">
-              <BrainCog
-                size={12}
-                className="shrink-0 text-purple-400"
-                role="img"
-                aria-label="Effort"
-              />
-              {formatReasoningEffort(log.reasoningEffort)}
-            </div>
-          )}
+          {(() => {
+            const reasoning = formatReasoningEffort(log.reasoningEffort);
+            const tier = getServiceTierDisplay(log);
+            if (!reasoning && !tier) return null;
+            return (
+              <div className="flex items-center gap-1 text-[10px] font-normal text-text-secondary">
+                {reasoning && (
+                  <>
+                    <BrainCog
+                      size={12}
+                      className="shrink-0 text-purple-400"
+                      role="img"
+                      aria-label="Effort"
+                    />
+                    <span className="truncate">{reasoning}</span>
+                  </>
+                )}
+                {tier && <ServiceTierIndicator display={tier} />}
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-4 gap-1 text-[11px]">
             <div
               className="min-w-0 overflow-hidden rounded bg-bg-subtle px-1 py-0.5"

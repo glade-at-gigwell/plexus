@@ -16,6 +16,7 @@ import { enforceContextLimit } from '../models/enforce-limits';
 import { getGlobalStallConfig, resolveStallConfig } from '../../utils/stall';
 import { preprocessVisionRequest } from '../vision/vision-request-preprocessor';
 import { resolveRouteCandidates } from '../routing/route-candidates';
+import type { RouteResult } from '../routing/router';
 import { bridgeChatToImageGeneration, isImageModelRoute } from './image-model-bridge';
 import { executeStandardAttempt } from './standard-attempt-request';
 import { isNativeOAuthRoute } from './request-payload-builder';
@@ -230,7 +231,6 @@ export class RequestManager {
             effectiveApiType,
             adapters
           );
-
         // Capture transformed request
         if (currentRequest.requestId) {
           DebugManager.getInstance().addTransformedRequest(
@@ -314,6 +314,21 @@ export class RequestManager {
         return result.response;
       } catch (error: any) {
         const effectiveError = attemptTimeout.isTimedOut() ? host.buildTimeoutError() : error;
+        // A timeout rebuilds the error object; carry the capture the dispatch
+        // boundary already attached across so the usage record still reflects
+        // the final attempted request. Never reconstruct it from the payload
+        // or headers here — those can be stale after a strip retry or an
+        // OAuth header rebuild.
+        if (effectiveError !== error && error?.routingContext) {
+          const { requestedServiceTier, requestedServiceTierRaw } = error.routingContext;
+          if (requestedServiceTier !== undefined || requestedServiceTierRaw !== undefined) {
+            effectiveError.routingContext = {
+              ...(effectiveError.routingContext || {}),
+              requestedServiceTier,
+              requestedServiceTierRaw,
+            };
+          }
+        }
         lastError = effectiveError;
         attemptTimeout.cleanup();
         doRelease();

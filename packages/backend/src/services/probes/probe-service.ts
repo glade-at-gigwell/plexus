@@ -5,6 +5,7 @@ import { UsageRecord } from '../../types/usage';
 import { DebugManager } from '../observability/debug-manager';
 import { calculateCosts } from '../../utils/calculate-costs';
 import { buildProbeChatRequest } from './probe-request';
+import { applyRequestedServiceTierFromError } from '../dispatch/service-tier-metadata';
 import {
   OpenAITransformer,
   AnthropicTransformer,
@@ -285,6 +286,10 @@ export class ProbeService {
       usageRecord.upstreamModel =
         response.plexus?.upstreamModel || usageRecord.finalAttemptModel || null;
       usageRecord.allAttemptedProviders = response.plexus?.allAttemptedProviders || null;
+      usageRecord.requestedServiceTier = response.plexus?.requestedServiceTier ?? null;
+      usageRecord.requestedServiceTierRaw = response.plexus?.requestedServiceTierRaw ?? null;
+      usageRecord.serviceTier = response.plexus?.serviceTier ?? null;
+      usageRecord.serviceTierRaw = response.plexus?.serviceTierRaw ?? null;
 
       if (response.usage) {
         usageRecord.tokensInput = response.usage.input_tokens;
@@ -346,6 +351,7 @@ export class ProbeService {
       usageRecord.durationMs = durationMs;
       usageRecord.attemptCount = e.routingContext?.attemptCount || usageRecord.attemptCount || 1;
       usageRecord.retryHistory = e.routingContext?.retryHistory || usageRecord.retryHistory || null;
+      applyRequestedServiceTierFromError(usageRecord, e);
       await this.usageStorage.saveRequest(usageRecord as UsageRecord);
 
       const errorDetails = {

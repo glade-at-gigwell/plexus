@@ -40,6 +40,10 @@ import {
 import { isRetryableNetworkError, isRetryableStatus } from './failover-policy';
 import { buildRequestPayload, NATIVE_OAUTH_STASH } from './request-payload-builder';
 import {
+  extractActualServiceTier,
+  extractActualServiceTierFromHeaders,
+} from './service-tier-metadata';
+import {
   createAttemptTimeout,
   executeUpstreamRequest,
   probeStreamingStart,
@@ -910,6 +914,20 @@ export class Dispatcher {
 
     this.enrichResponseWithMetadata(streamResponse, route, targetApiType);
 
+    // Provider-reported actual tier from response headers (e.g. Gemini
+    // `x-gemini-service-tier`). Body/stream-reported tiers are extracted later
+    // from the reconstructed raw response by the usage inspector.
+    const headerActualTier = extractActualServiceTierFromHeaders(
+      Object.fromEntries(response.headers.entries())
+    );
+    if (headerActualTier.raw) {
+      streamResponse.plexus = {
+        ...(streamResponse.plexus || {}),
+        serviceTier: headerActualTier.tier,
+        serviceTierRaw: headerActualTier.raw,
+      } as any;
+    }
+
     return streamResponse;
   }
 
@@ -1009,6 +1027,14 @@ export class Dispatcher {
     );
     logger.silly('Upstream Response Payload', responseBody);
 
+    // Native provider-reported actual tier, read before any adapter/transformer
+    // rewriting so it reflects exactly what the provider sent.
+    const nativeActualTier = extractActualServiceTier(
+      responseBody,
+      Object.fromEntries(response.headers.entries()),
+      targetApiType
+    );
+
     // Native OAuth: reverse request-side tool-name renames on the raw response
     // body (JSON string round-trip mirrors the streaming frame reversal).
     const nativeOAuth = (route as any)[NATIVE_OAUTH_STASH];
@@ -1058,6 +1084,13 @@ export class Dispatcher {
     }
 
     this.enrichResponseWithMetadata(unifiedResponse, route, targetApiType);
+    if (nativeActualTier.raw) {
+      unifiedResponse.plexus = {
+        ...(unifiedResponse.plexus || {}),
+        serviceTier: nativeActualTier.tier,
+        serviceTierRaw: nativeActualTier.raw,
+      } as any;
+    }
 
     return unifiedResponse;
   }

@@ -291,6 +291,12 @@ export interface UnifiedChatResponse {
     pricingFallback?: boolean;
     allAttemptedProviders?: string;
     retryHistory?: string;
+    // Service-tier metadata: requested captures the final outgoing request,
+    // serviceTier captures only what the provider actually reported.
+    requestedServiceTier?: string | null;
+    requestedServiceTierRaw?: string | null;
+    serviceTier?: string | null;
+    serviceTierRaw?: string | null;
   };
   reasoning_content?: string | null;
   thinking?: {
@@ -600,6 +606,10 @@ export interface UnifiedDecisionsResponse {
     providerDiscount?: number;
     canonicalModel?: string;
     config?: any;
+    requestedServiceTier?: string | null;
+    requestedServiceTierRaw?: string | null;
+    serviceTier?: string | null;
+    serviceTierRaw?: string | null;
   };
   rawResponse?: any;
 }
