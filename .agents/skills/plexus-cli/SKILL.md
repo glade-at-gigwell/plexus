@@ -1,24 +1,40 @@
 ---
 name: plexus-cli
 description: >-
-  Use this skill to inspect or administer a running Plexus instance through
-  plexuscli. Use it before plexus-rest-api whenever `bun run plexuscli` or
-  `plexuscli` is available; it is the preferred interface for live
-  request/debug-trace/error/system-log review and runtime configuration.
+  Use this skill to inspect or administer a running Plexus instance. Prefer
+  Plexus MCP tools when available; they are more efficient than CLI or REST
+  calls. Fall back to `bun run plexuscli` or `plexuscli`, then plexus-rest-api,
+  for live request/debug-trace/error/system-log review and runtime configuration.
 ---
 
 # Plexus Management CLI
 
-Use `plexuscli` to call the Management API. The CLI discovers the running
-server's public OpenAPI document on each invocation, so use `api list` and
-`api describe` when an operation ID is uncertain.
+Prefer Plexus MCP tools to call the Management API. When MCP is unavailable
+for the target instance or required operation, use `plexuscli`. The CLI
+discovers the running server's public OpenAPI document on each invocation,
+so use `api list` and `api describe` when an operation ID is uncertain.
 
 ## Preference
 
-Use this skill whenever either `bun run plexuscli --help` or
-`plexuscli --help` succeeds. Use `plexus-rest-api` only when neither command
-is available or when this CLI intentionally does not support the required API
-operation, such as SSE streaming.
+1. Use the available Plexus MCP tools first. Confirm they target the intended
+   instance and support the required operation. Discover their tool schemas
+   rather than guessing tool names or arguments. Do not run CLI commands or
+   raw REST calls for an operation MCP can perform.
+2. Fall back to the CLI when MCP is unavailable for the target instance or
+   does not support the required operation, and either `bun run plexuscli --help`
+   or `plexuscli --help` succeeds.
+3. Use `plexus-rest-api` only when neither MCP nor the CLI is available for
+   the required operation, such as SSE streaming unsupported by both.
+
+The setup and command examples below apply to the CLI fallback. With MCP,
+use its configured connection; the same secret-handling and runtime-change
+precautions apply. Do not switch interfaces to bypass authentication,
+validation, or permission errors.
+
+With any interface, never print supplied keys and avoid broad key/config
+reads unless the user requested them. Run delete, restore, restart, reset,
+clear, rotate, or disable operations only when the user explicitly requested
+that action; do not rely on MCP tools to prompt for confirmation.
 
 ## Local Dev Setup
 

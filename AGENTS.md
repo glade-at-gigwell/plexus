@@ -14,7 +14,7 @@ Use the built-in search tool to query `.repomap.txt` by symbol, keyword, or path
 - **NEVER** use `--no-verify` or `LEFTHOOK=0` without user permission.
 - **NEVER** manually create or edit migration artifacts.
 - **NEVER** produce implementation or summary documents unless specifically requested.
-- **DEBUGGING** Plexus instances: read and use the `plexus-cli` skill. For live CLI debugging of `staging`, use the worktree `.env` values `PLEXUS_STAGING_URL` and `PLEXUS_ADMIN_KEY`. This is separate from `scripts/prep-dev.ts`, which uses `PLEXUS_STAGING_ADMIN_KEY` for staging imports and `PLEXUS_ADMIN_KEY` for the local instance.
+- **DEBUGGING / ADMINISTERING** Plexus instances: prefer the Plexus MCP tools when available for the target instance and required operation; they are more efficient than CLI or raw REST calls. Read the `plexus-cli` skill for the fallback workflow: MCP first, CLI second, REST API last. For live CLI debugging of `staging`, use the worktree `.env` values `PLEXUS_STAGING_URL` and `PLEXUS_ADMIN_KEY`. This is separate from `scripts/prep-dev.ts`, which uses `PLEXUS_STAGING_ADMIN_KEY` for staging imports and `PLEXUS_ADMIN_KEY` for the local instance.
 
 ## Task triggers
 
