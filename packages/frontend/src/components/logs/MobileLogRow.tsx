@@ -14,6 +14,7 @@ import {
   Zap,
   AlertTriangle,
   Bug,
+  BrainCog,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useCurrency } from '../../lib/CurrencyContext';
@@ -166,8 +167,14 @@ export const MobileLogRow = React.memo(
 
         <div className="mt-1 space-y-1">
           {formatReasoningEffort(log.reasoningEffort) && (
-            <div className="truncate text-[10px] font-normal text-text-secondary">
-              Reasoning: {formatReasoningEffort(log.reasoningEffort)}
+            <div className="flex items-center gap-1 truncate text-[10px] font-normal text-text-secondary">
+              <BrainCog
+                size={12}
+                className="shrink-0 text-purple-400"
+                role="img"
+                aria-label="Effort"
+              />
+              {formatReasoningEffort(log.reasoningEffort)}
             </div>
           )}
           <div className="grid grid-cols-4 gap-1 text-[11px]">

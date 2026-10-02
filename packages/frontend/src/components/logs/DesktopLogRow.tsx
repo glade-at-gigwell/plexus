@@ -388,11 +388,17 @@ export const DesktopLogRow = React.memo(
             </div>
             {formatReasoningEffort(log.reasoningEffort) && (
               <div className="flex min-w-0 items-center gap-1">
+                <BrainCog
+                  size={12}
+                  className="shrink-0 text-purple-400"
+                  role="img"
+                  aria-label="Effort"
+                />
                 <span
                   className="truncate"
                   style={{ color: 'var(--color-text-secondary)', fontSize: '0.85em' }}
                 >
-                  Reasoning: {formatReasoningEffort(log.reasoningEffort)}
+                  {formatReasoningEffort(log.reasoningEffort)}
                 </span>
               </div>
             )}
