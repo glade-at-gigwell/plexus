@@ -4,7 +4,7 @@
 # - Reusable action floats on `alibaba/open-code-review@main` with `ocr_version: latest`.
 #   Pinning only the action does NOT freeze the CLI, so floating both is the
 #   accepted trade-off: zero maintenance, review behavior may drift with releases.
-# - Model is claude-opus-5 via the existing LLM_API_HOST / LLM_API_KEY secrets (same
+# - Model is claude-opus-5-5 via the existing LLM_API_HOST / LLM_API_KEY secrets (same
 #   gateway Cora used, but over the Anthropic Messages API at /v1/messages).
 # - `llm_extra_body` sets `output_config.effort: high` (Anthropic thinking level).
 #   `llm_reasoning_effort` is NOT used: the action rejects it on the Anthropic
@@ -18,9 +18,10 @@
 name: OpenCodeReview PR Review
 run-name: "OCR Review: PR #${{ github.event.pull_request.number || github.event.issue.number }}"
 
-# Same conditional group as the upstream demo: matching events share a per-PR group
-# so a new review cancels a stale one; unrelated comments land in a unique noop group
-# and never cancel a running review.
+# Matching events share a per-PR group; unrelated comments use a unique noop group.
+# Only explicit reruns cancel an active review. Automatic repeats queue behind it
+# so they cannot interrupt the first review before checking its persistent marker.
+# GitHub keeps one pending run per group, so a new event can replace a queued rerun.
 concurrency:
   group: >-
     ${{
@@ -44,14 +45,14 @@ concurrency:
       && format('ocr-{0}', github.event.pull_request.number || github.event.issue.number)
       || format('noop-{0}', github.run_id)
     }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'issue_comment' }}
 
 on:
   # pull_request_target (not pull_request) so secrets are available for fork PRs.
   # Safe: the action checks out the trusted base and only reads the head diff.
   pull_request_target:
     branches: [main]
-    types: [opened, reopened, ready_for_review, synchronize]
+    types: [opened, reopened, ready_for_review]
   issue_comment:
     types: [created]
 
@@ -85,9 +86,52 @@ jobs:
         )
       )
     steps:
+      - name: Check whether OCR should run
+        id: review-gate
+        uses: actions/github-script@v9
+        with:
+          script: |
+            if (context.eventName === 'issue_comment') {
+              core.setOutput('should_run', 'true');
+              return;
+            }
+
+            const marker = '<!-- ocr-review-detail -->';
+            const prNumber = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.login === 'github-actions[bot]'
+              && comment.body?.includes(marker),
+            );
+            if (existing) {
+              core.info('OCR has already run or started for this PR. Use /open-code-review to rerun it.');
+              core.setOutput('should_run', 'false');
+              return;
+            }
+
+            // Claim the automatic attempt before starting OCR, including failed or cancelled runs.
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: [
+                marker,
+                '## OpenCodeReview',
+                '',
+                'The one-time automatic review has started.',
+                'To request another review, comment `/open-code-review`.',
+              ].join('\n'),
+            });
+            core.setOutput('should_run', 'true');
+
       - name: Get PR context
         id: pr-context
-        if: github.event_name == 'issue_comment'
+        if: steps.review-gate.outputs.should_run == 'true' && github.event_name == 'issue_comment'
         uses: actions/github-script@v9
         with:
           script: |
@@ -105,6 +149,7 @@ jobs:
 
       - name: Normalize LLM endpoint URL
         id: llm
+        if: steps.review-gate.outputs.should_run == 'true'
         env:
           LLM_API_HOST: ${{ secrets.LLM_API_HOST }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
@@ -128,11 +173,12 @@ jobs:
 
       - name: Run OpenCodeReview
         id: ocr
+        if: steps.review-gate.outputs.should_run == 'true'
         uses: alibaba/open-code-review@main
         with:
           llm_url: ${{ steps.llm.outputs.url }}
           llm_auth_token: ${{ secrets.LLM_API_KEY }}
-          llm_model: claude-opus-5
+          llm_model: claude-opus-5-5
           llm_use_anthropic: 'true'
           llm_extra_body: '{"output_config": {"effort": "high"}}'
           # Keep in step with the job timeout-minutes above.
@@ -143,6 +189,7 @@ jobs:
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
 
       - name: Check for blocking OCR findings
+        if: steps.review-gate.outputs.should_run == 'true'
         env:
           REVIEW_FILE: /tmp/ocr-result.json
         run: |
@@ -175,7 +222,7 @@ jobs:
           PY
 
       - name: Post detailed OCR summary
-        if: always()
+        if: always() && steps.review-gate.outputs.should_run == 'true'
         uses: actions/github-script@v9
         env:
           REVIEW_FILE: /tmp/ocr-result.json
@@ -233,6 +280,7 @@ jobs:
                 ...entries,
               ].join('\n');
             }
+            body += '\n\n_Automatic review runs once per PR. Comment `/open-code-review` to request another review._';
             if (body.length > 60000) {
               body = `${body.slice(0, 59500)}\n\n_Additional findings were omitted because the comment was too large._`;
             }
