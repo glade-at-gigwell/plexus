@@ -434,6 +434,7 @@ packages/backend/src/services/dispatch/cache-key-injection.ts:28 [function] toHe
 packages/backend/src/services/dispatch/cache-key-injection.ts:40 [function] resolveCacheKeyInjection
 packages/backend/src/services/dispatch/cache-key-injection.ts:62 [function] deriveCacheInjectionKey
 packages/backend/src/services/dispatch/cache-key-injection.ts:81 [function] applyBodyCacheKeyInjection
+packages/backend/src/services/dispatch/cache-retention.ts:6 [function] resolveStickyCacheTtlMs
 packages/backend/src/services/dispatch/dispatcher-auto-compat.ts:103 [function] extractGenerationIntent
 packages/backend/src/services/dispatch/dispatcher-auto-compat.ts:1032 [function] matchThinkingSignatureError
 packages/backend/src/services/dispatch/dispatcher-auto-compat.ts:1047 [function] isAnthropicMessagesPayload
@@ -642,12 +643,12 @@ packages/backend/src/services/dispatch/service-tier-selection.ts:39 [function] n
 packages/backend/src/services/dispatch/service-tier-selection.ts:64 [function] inferServiceTierFormat
 packages/backend/src/services/dispatch/service-tier-selection.ts:77 [interface] ResolvedServiceTier
 packages/backend/src/services/dispatch/service-tier-selection.ts:91 [function] resolveServiceTier
-packages/backend/src/services/dispatch/standard-attempt-request.ts:120 [function] executeStandardAttempt
-packages/backend/src/services/dispatch/standard-attempt-request.ts:139 [function] runStandardAttempt
-packages/backend/src/services/dispatch/standard-attempt-request.ts:34 [function] attachRequestedServiceTier
-packages/backend/src/services/dispatch/standard-attempt-request.ts:54 [function] attachRequestedServiceTierToError
-packages/backend/src/services/dispatch/standard-attempt-request.ts:79 [function] deriveProbeStallConfig
-packages/backend/src/services/dispatch/standard-attempt-request.ts:94 [interface] StandardAttemptContext
+packages/backend/src/services/dispatch/standard-attempt-request.ts:121 [function] executeStandardAttempt
+packages/backend/src/services/dispatch/standard-attempt-request.ts:140 [function] runStandardAttempt
+packages/backend/src/services/dispatch/standard-attempt-request.ts:35 [function] attachRequestedServiceTier
+packages/backend/src/services/dispatch/standard-attempt-request.ts:55 [function] attachRequestedServiceTierToError
+packages/backend/src/services/dispatch/standard-attempt-request.ts:80 [function] deriveProbeStallConfig
+packages/backend/src/services/dispatch/standard-attempt-request.ts:95 [interface] StandardAttemptContext
 packages/backend/src/services/dispatch/transformer-factory.ts:23 [class] TransformerFactory
 packages/backend/src/services/dispatch/transformer-factory.ts:24 [method] TransformerFactory.getTransformer
 packages/backend/src/services/dispatch/upstream-execution.ts:14 [function] createAttemptTimeout
@@ -1225,7 +1226,7 @@ packages/backend/src/services/routing/service-tier-suffix.ts:29 [interface] Serv
 packages/backend/src/services/routing/service-tier-suffix.ts:35 [function] isServiceTierSuffix
 packages/backend/src/services/routing/service-tier-suffix.ts:44 [function] splitServiceTierSuffix
 packages/backend/src/services/routing/service-tier-suffix.ts:68 [function] serviceTierNames
-packages/backend/src/services/routing/sticky-session-manager.ts:20 [class] StickySessionManager
+packages/backend/src/services/routing/sticky-session-manager.ts:22 [class] StickySessionManager
 packages/backend/src/services/routing/sticky-session-manager.ts:3 [interface] StickyEntry
 packages/backend/src/services/runtime/concurrency-tracker.ts:4 [interface] ConcurrencySnapshot
 packages/backend/src/services/runtime/concurrency-tracker.ts:9 [class] ConcurrencyTracker
