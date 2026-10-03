@@ -197,11 +197,11 @@ packages/backend/src/routes/inference/images.ts:82 [function] extractImageEditUp
 packages/backend/src/routes/inference/index.ts:19 [function] registerInferenceRoutes
 packages/backend/src/routes/inference/messages.ts:22 [function] registerMessagesRoute
 packages/backend/src/routes/inference/models-ui.ts:25 [function] renderModelsUiPage
-packages/backend/src/routes/inference/models.ts:113 [function] registerModelsRoute
-packages/backend/src/routes/inference/models.ts:50 [interface] AliasInlineTarget
-packages/backend/src/routes/inference/models.ts:514 [function] registerMuseCodeModelsRoute
-packages/backend/src/routes/inference/models.ts:62 [function] quirksTargetForBuiltinApi
-packages/backend/src/routes/inference/models.ts:89 [function] resolveAliasInlineTarget
+packages/backend/src/routes/inference/models.ts:114 [function] registerModelsRoute
+packages/backend/src/routes/inference/models.ts:51 [interface] AliasInlineTarget
+packages/backend/src/routes/inference/models.ts:517 [function] registerMuseCodeModelsRoute
+packages/backend/src/routes/inference/models.ts:63 [function] quirksTargetForBuiltinApi
+packages/backend/src/routes/inference/models.ts:90 [function] resolveAliasInlineTarget
 packages/backend/src/routes/inference/responses.ts:29 [function] detectResponsesApiType
 packages/backend/src/routes/inference/responses.ts:55 [function] registerResponsesRoute
 packages/backend/src/routes/inference/speech.ts:33 [function] registerSpeechRoute
@@ -747,6 +747,7 @@ packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:51 [method] McpUsag
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:60 [method] McpUsageStorageService.saveRequest
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:9 [interface] McpRequestUsageRecord
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:94 [method] McpUsageStorageService.saveDebugLog
+packages/backend/src/services/models/alias-service-tiers.ts:25 [function] resolveAliasServiceTiers
 packages/backend/src/services/models/enforce-limits.ts:130 [function] resolveContextLength
 packages/backend/src/services/models/enforce-limits.ts:136 [interface] ContextLimitOptions
 packages/backend/src/services/models/enforce-limits.ts:146 [interface] EnforceRouteInfo
