@@ -747,7 +747,7 @@ packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:51 [method] McpUsag
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:60 [method] McpUsageStorageService.saveRequest
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:9 [interface] McpRequestUsageRecord
 packages/backend/src/services/mcp-proxy/mcp-usage-storage.ts:94 [method] McpUsageStorageService.saveDebugLog
-packages/backend/src/services/models/alias-service-tiers.ts:25 [function] resolveAliasServiceTiers
+packages/backend/src/services/models/alias-service-tiers.ts:28 [function] resolveAliasServiceTiers
 packages/backend/src/services/models/enforce-limits.ts:130 [function] resolveContextLength
 packages/backend/src/services/models/enforce-limits.ts:136 [interface] ContextLimitOptions
 packages/backend/src/services/models/enforce-limits.ts:146 [interface] EnforceRouteInfo
