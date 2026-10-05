@@ -11,7 +11,12 @@ import { projectReasoningForResponses } from '../../transformers/utils';
 import { clampAnthropicEffortAndThinking } from '../../transformers/anthropic/thinking-clamp';
 import { getApiBaseType } from '../../utils/api-format';
 import { LITE_ALLOWED_TOOL_TYPES } from './responses-extensions';
-import { getDefaultServiceTier, hasExplicitTier } from './service-tier-selection';
+import {
+  SERVICE_TIER_API_TYPES,
+  getDefaultServiceTier,
+  hasExplicitTier,
+  stripKeyDefaultTier,
+} from './service-tier-selection';
 
 function hasOwn(value: Record<string, any>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
@@ -134,12 +139,15 @@ function extractGenerationIntent(payload: any, request: UnifiedChatRequest): Gen
  *
  * The per-key default is used only when the client supplied no tier. Preserve
  * its canonical spelling when the legacy writer has already emitted a wire
- * alias into the payload.
+ * alias into the payload. Key defaults are tagged `key_default` (not
+ * `service_tier`) so egress can treat them as best-effort: mapped targets
+ * resolve them through the capability map, unmapped targets strip them
+ * instead of leaking a tier the provider may reject.
  */
 function pickServiceTierIntent(
   request: UnifiedChatRequest,
   source: Record<string, any>
-): { value: string; source: 'suffix' | 'speed' | 'service_tier' } | undefined {
+): { value: string; source: 'suffix' | 'speed' | 'service_tier' | 'key_default' } | undefined {
   if (typeof request.serviceTier === 'string') {
     return { value: request.serviceTier, source: 'suffix' };
   }
@@ -152,7 +160,7 @@ function pickServiceTierIntent(
   // canonical value before inspecting the payload keeps a legacy-injected wire
   // alias from hiding `ultrafast`/`standard` from a serviceTierMap.
   if (keyDefault && originalBody && !hasExplicitTier(originalBody)) {
-    return { value: keyDefault, source: 'service_tier' };
+    return { value: keyDefault, source: 'key_default' };
   }
 
   const candidates: Array<[unknown, 'speed' | 'service_tier']> = [
@@ -167,7 +175,7 @@ function pickServiceTierIntent(
     }
   }
 
-  if (keyDefault) return { value: keyDefault, source: 'service_tier' };
+  if (keyDefault) return { value: keyDefault, source: 'key_default' };
   return undefined;
 }
 
@@ -275,7 +283,8 @@ function projectOpenAiCompletionsAutoCompat(
 
   // Mapped service tier: write the native value, or strip an unsupported one so
   // the client's rejected tier cannot leak upstream. Legacy (unmapped) models
-  // have no key here and keep their existing pass-through.
+  // keep pass-through for explicit tiers; key defaults were stripped up front
+  // and the registry omits them, so an unsupported default can never leak.
   projectOpenAiServiceTier(next, options, intent.serviceTierSource);
 
   if (!model.reasoning) return next;
@@ -602,6 +611,23 @@ function selectInlineGenerationIntent(
   };
 }
 
+/**
+ * Whether the route positively declares service-tier support for a target: a
+ * per-model `serviceTierMap` (which replaces the provider-wide one) or a
+ * provider-wide map with at least one usable native value. The pi-ai catalog
+ * itself never carries tier maps, so preset/config quirks are the
+ * declaration surface. Unknown support means key defaults are withheld;
+ * explicit client tiers still pass through.
+ */
+function routeDeclaresTierSupport(route: RouteResult, targetApiType: string): boolean {
+  const block = route.config.pi_ai_quirks?.[getApiBaseType(targetApiType) as keyof PiAiQuirks];
+  if (!block) return false;
+  const modelMap = block.models?.[route.model]?.serviceTierMap;
+  const effective = modelMap ?? block.serviceTierMap;
+  if (!effective) return false;
+  return Object.values(effective).some((v) => typeof v === 'string' && v.length > 0);
+}
+
 export function applyRegistryAutoCompat(
   providerPayload: any,
   request: UnifiedChatRequest,
@@ -609,7 +635,23 @@ export function applyRegistryAutoCompat(
   targetApiType: string
 ): any {
   const autoCompat = route.config.auto_compat === true || route.modelConfig?.auto_compat === true;
-  if (!autoCompat) return providerPayload;
+
+  // Key defaults are best-effort: when the route declares no tier support,
+  // strip an injected default up front — regardless of auto_compat — so an
+  // unknown provider can never reject the request over a tier nobody asked
+  // for. `auto_compat` defaults off, so gating the strip on it would leave
+  // most unmapped routes sending injected defaults verbatim. Routes with a
+  // declared map keep the injected value for the mapping below; explicit
+  // tiers are never touched here.
+  const tierPayload =
+    !routeDeclaresTierSupport(route, targetApiType) &&
+    SERVICE_TIER_API_TYPES.has(getApiBaseType(targetApiType)) &&
+    typeof providerPayload === 'object' &&
+    providerPayload !== null
+      ? stripKeyDefaultTier(providerPayload, request)
+      : providerPayload;
+
+  if (!autoCompat) return tierPayload;
 
   const piAiProvider = route.config.pi_ai_provider;
   const piAiModelId = route.modelConfig?.pi_ai_model_id;
@@ -664,16 +706,16 @@ export function applyRegistryAutoCompat(
           piAiProvider ? ` (${piAiProvider}/${piAiModelId ?? '<unlinked>'})` : ''
         } and no matching quirks`
     );
-    return providerPayload;
+    return tierPayload;
   }
 
-  const intent = extractGenerationIntent(providerPayload, request);
+  const intent = extractGenerationIntent(tierPayload, request);
   const selectedIntent = inline ? selectInlineGenerationIntent(inline, intent) : intent;
   const options = buildGenerationOptions(piAiModel, selectedIntent);
   // An inline API declaration alone carries no model capabilities. Leave the
   // payload untouched unless a declared trait actually requests a projection.
   if (inline && Object.keys(options).length === 0 && inline.compat?.supportsTemperature !== false) {
-    return providerPayload;
+    return tierPayload;
   }
 
   // Anthropic fast mode's beta flag is resolved at fetch time in
@@ -688,20 +730,20 @@ export function applyRegistryAutoCompat(
     api === 'openai-codex-responses' ||
     api === 'azure-openai-responses'
   ) {
-    nextPayload = projectResponsesAutoCompat(providerPayload, piAiModel, selectedIntent, options);
+    nextPayload = projectResponsesAutoCompat(tierPayload, piAiModel, selectedIntent, options);
   } else if (api === 'anthropic-messages') {
     nextPayload = projectAnthropicAutoCompat(
-      providerPayload,
+      tierPayload,
       piAiModel,
       selectedIntent,
       options,
       !!inline
     );
   } else if (api === 'google-generative-ai' || api === 'google-generative-ai-vertex') {
-    nextPayload = projectGeminiAutoCompat(providerPayload, selectedIntent, options);
+    nextPayload = projectGeminiAutoCompat(tierPayload, selectedIntent, options);
   } else {
     nextPayload = projectOpenAiCompletionsAutoCompat(
-      providerPayload,
+      tierPayload,
       request,
       piAiModel,
       selectedIntent,
